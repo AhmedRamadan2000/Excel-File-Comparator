@@ -27,7 +27,7 @@ A modern, web-based tool to compare Excel files and identify matching and unique
 
 ### Method 2: Using Live Server (Recommended for Development)
 1. Install Node.js from [nodejs.org](https://nodejs.org/)
-2. Navigate to the project folder in terminal/command prompt
+2. Navigate to the project folder in the terminal/command prompt
 3. Run: `npm install`
 4. Run: `npm start`
 5. Open your browser to `http://localhost:3000`
@@ -47,7 +47,7 @@ excel-comparator/
 
 1. **File Upload**: Uses HTML5 File API to read Excel files
 2. **Data Processing**: SheetJS library converts Excel data to JSON format
-3. **Comparison Logic**: Compares each row in the source file against all rows in comparison files
+3. **Comparison Logic**: Compares each row in the source file against all rows in the comparison files
 4. **Results Display**: Shows statistics, matches, and unique rows in organized tables
 5. **Export**: Generates downloadable CSV or JSON files with results
 
@@ -79,39 +79,6 @@ To contribute or modify this project:
 3. Test by opening `index.html` in a browser
 4. For development server: run `npm start`
 
-## Performance Considerations
-
-- **Client-side Processing**: All processing happens in the browser
-- **Memory Usage**: Large files (>10MB) may cause performance issues
-- **Display Limits**: Only first 100 results shown in tables (full data available in exports)
-
-## Future Enhancements
-
-- [ ] Column-specific comparison options
-- [ ] Fuzzy matching for similar (not exact) rows
-- [ ] Multiple sheet support
-- [ ] Database integration
-- [ ] Progress bars for large files
-- [ ] Advanced filtering options
-- [ ] Bulk file processing
-
-## Troubleshooting
-
-**Files won't upload:**
-- Ensure files are in supported formats (.xlsx, .xls, .csv)
-- Check file size (very large files may cause issues)
-- Try refreshing the page
-
-**Comparison not working:**
-- Make sure all three files are uploaded
-- Check that files contain data (not empty)
-- Verify files have readable content
-
-**Results seem incorrect:**
-- Remember that comparison uses exact matching
-- Check for extra spaces or formatting differences in your data
-- Export results to verify the raw comparison data
-
 ## License
 
 MIT License - feel free to use and modify as needed.
@@ -119,3 +86,4 @@ MIT License - feel free to use and modify as needed.
 ## Support
 
 For issues or questions, please check the troubleshooting section above or create an issue in the project repository.
+
