@@ -1,0 +1,32 @@
+{
+  "name": "excel-comparator",
+  "version": "1.0.0",
+  "description": "A web-based tool to compare Excel files and find matching/unique rows",
+  "main": "index.html",
+  "scripts": {
+    "start": "live-server --port=3000",
+    "build": "echo 'No build process needed for vanilla HTML/CSS/JS'",
+    "test": "echo 'No tests specified'"
+  },
+  "keywords": [
+    "excel",
+    "comparison",
+    "data-analysis",
+    "file-processing",
+    "web-app"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "devDependencies": {
+    "live-server": "^1.2.2"
+  },
+  "dependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/excel-comparator.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/excel-comparator/issues"
+  },
+  "homepage": "https://github.com/yourusername/excel-comparator#readme"
+}

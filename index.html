@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel File Comparator</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Excel File Comparator</h1>
+        
+        <div class="file-upload-section">
+            <div class="file-upload-box source">
+                <h3>Bank File</h3>
+                <p>Upload the main Excel file to compare against</p>
+                <input type="file" id="sourceFile" class="file-input" accept=".xlsx,.xls,.csv">
+                <label for="sourceFile" class="file-label">Choose Bank File</label>
+                <div class="file-name" id="sourceFileName"></div>
+            </div>
+            
+            <div class="file-upload-box">
+                <h3>Compare BDC EGP</h3>
+                <p>Upload the first comparison file</p>
+                <input type="file" id="compareFile1" class="file-input" accept=".xlsx,.xls,.csv">
+                <label for="compareFile1" class="file-label">Choose BDC EGP</label>
+                <div class="file-name" id="compareFile1Name"></div>
+            </div>
+            
+            <div class="file-upload-box">
+                <h3>Compare BDC EGP - Euro based</h3>
+                <p>Upload the second comparison file</p>
+                <input type="file" id="compareFile2" class="file-input" accept=".xlsx,.xls,.csv">
+                <label for="compareFile2" class="file-label">Choose BDC EGP - Euro based</label>
+                <div class="file-name" id="compareFile2Name"></div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="compare-btn" onclick="compareFiles()" id="compareBtn" disabled>
+                Start Comparison
+            </button>
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            Processing files, please wait...
+        </div>
+        
+        <div class="results" id="results" style="display: none;">
+            <div class="description-info">
+                <h4>📋 Comparison Method</h4>
+                <p><strong>Description Column Matching:</strong> This tool compares the "description" column from your Bank File against the description columns in the other two files.</p>
+                <p><strong>Matching Logic:</strong> Case-insensitive comparison of description text (ignores extra spaces).</p>
+                <p><strong>Column Detection:</strong> Automatically finds columns with "description" in the header name.</p>
+            </div>
+            
+            <div class="result-section">
+                <h2 class="result-title statistics">Comparison Statistics</h2>
+                <div class="stats-grid" id="statsGrid">
+                    <!-- Statistics will be populated here -->
+                </div>
+            </div>
+            
+            <div class="result-section">
+                <h2 class="result-title matches">Matching Descriptions</h2>
+                <p>Source descriptions that have matches in one or both comparison files:</p>
+                <div id="matchingResults"></div>
+            </div>
+            
+            <div class="result-section">
+                <h2 class="result-title differences">Unique Descriptions</h2>
+                <p>Source descriptions that don't appear in either comparison file:</p>
+                <div id="uniqueResults"></div>
+            </div>
+            
+            <div class="export-controls">
+                <button class="export-btn" onclick="exportResults('csv')">Export as CSV</button>
+                <button class="export-btn" onclick="exportResults('json')">Export as JSON</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
