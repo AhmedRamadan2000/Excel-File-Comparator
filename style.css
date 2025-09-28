@@ -242,6 +242,32 @@ h1 {
     box-shadow: 0 5px 15px rgba(243, 156, 18, 0.3);
 }
 
+.stat-card.tp2p-matches {
+    background: linear-gradient(135deg, #f39c12, #e67e22);
+}
+
+.stat-card.exact-matches {
+    background: linear-gradient(135deg, #9b59b6, #8e44ad);
+}
+
+.tp2p-match {
+    background-color: #f39c12 !important;
+    color: white !important;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.exact-match {
+    background-color: #9b59b6 !important;
+    color: white !important;
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
 .stat-card.success {
     background: linear-gradient(135deg, #2ecc71, #27ae60);
 }
@@ -276,6 +302,24 @@ h1 {
 .description-info p {
     margin: 5px 0;
     color: #7f8c8d;
+}
+
+.tp2p-info {
+    background: linear-gradient(135deg, rgba(243, 156, 18, 0.1), rgba(230, 126, 34, 0.1));
+    border-left: 4px solid #f39c12;
+    padding: 15px;
+    margin: 20px 0;
+    border-radius: 0 10px 10px 0;
+}
+
+.tp2p-info h4 {
+    color: #e67e22;
+    margin-bottom: 10px;
+}
+
+.tp2p-info p {
+    margin: 5px 0;
+    color: #d35400;
 }
 
 @media (max-width: 768px) {

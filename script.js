@@ -7,12 +7,56 @@ function findDescriptionColumn(data) {
                 row[colIndex].toString().toLowerCase().trim() === 'description') {
                 return {
                     headerRow: rowIndex,
-                    columnIndex: colIndex
+                    columnIndex: colIndex,
+                    creditColumn: findCreditColumn(row),
+                    debitColumn: findDebitColumn(row)
                 };
             }
         }
     }
     return null;
+}
+
+function findCreditColumn(headerRow) {
+    for (let i = 0; i < headerRow.length; i++) {
+        if (headerRow[i] && 
+            headerRow[i].toString().toLowerCase().trim() === 'credit') {
+            return i;
+        }
+    }
+    return -1;
+}
+
+function findDebitColumn(headerRow) {
+    for (let i = 0; i < headerRow.length; i++) {
+        if (headerRow[i] && 
+            headerRow[i].toString().toLowerCase().trim() === 'debit') {
+            return i;
+        }
+    }
+    return -1;
+}
+
+function isTP2PMatch(sourceDesc, compareDesc, compareRow, creditColumnIndex) {
+    // Check if source description ends with TP2P
+    if (!sourceDesc.toString().toUpperCase().endsWith('TP2P')) {
+        return false;
+    }
+    
+    // Extract the base code without TP2P
+    const baseCode = sourceDesc.toString().slice(0, -4); // Remove last 4 characters (TP2P)
+    
+    // Check if compare description matches the base code
+    const compareDescMatch = compareDesc.toString().trim() === baseCode.trim();
+    
+    // Check if the amount is in credit column (not empty and not zero)
+    let isCreditEntry = false;
+    if (creditColumnIndex !== -1 && compareRow[creditColumnIndex]) {
+        const creditValue = parseFloat(compareRow[creditColumnIndex].toString().replace(/,/g, ''));
+        isCreditEntry = !isNaN(creditValue) && creditValue > 0;
+    }
+    
+    return compareDescMatch && isCreditEntry;
 }
 
 function performComparison(source, compare1, compare2) {
@@ -28,6 +72,8 @@ function performComparison(source, compare1, compare2) {
             compare2Rows: 0,
             matchingRows: 0,
             uniqueRows: 0,
+            tp2pMatches: 0,
+            exactMatches: 0,
             descriptionColumnFound: {
                 source: sourceDescInfo !== null,
                 compare1: compare1DescInfo !== null,
@@ -40,7 +86,7 @@ function performComparison(source, compare1, compare2) {
 
     // If source doesn't have description column, return error
     if (!sourceDescInfo) {
-        throw new Error('Description column not found in Bank File. Please ensure your Bank File has a column named "Description" (case insensitive).');
+        throw new Error('Description column not found in source file. Please ensure your source file has a column named "Description" (case insensitive).');
     }
 
     // Get data rows after the header row for each file
@@ -65,6 +111,8 @@ function performComparison(source, compare1, compare2) {
         
         let foundInCompare1 = false;
         let foundInCompare2 = false;
+        let matchType1 = '';
+        let matchType2 = '';
         let matchingRows = {
             file1: [],
             file2: []
@@ -74,14 +122,29 @@ function performComparison(source, compare1, compare2) {
         if (compare1DescInfo) {
             for (let j = 0; j < compare1DataRows.length; j++) {
                 const compare1Description = compare1DataRows[j][compare1DescInfo.columnIndex];
-                if (compare1Description && 
-                    sourceDescription.toString().toLowerCase().trim() === 
-                    compare1Description.toString().toLowerCase().trim()) {
-                    foundInCompare1 = true;
-                    matchingRows.file1.push({
-                        rowIndex: j + compare1DescInfo.headerRow + 2, // Actual Excel row number
-                        data: compare1DataRows[j]
-                    });
+                if (compare1Description) {
+                    // First try exact match
+                    if (sourceDescription.toString().toLowerCase().trim() === 
+                        compare1Description.toString().toLowerCase().trim()) {
+                        foundInCompare1 = true;
+                        matchType1 = 'exact';
+                        matchingRows.file1.push({
+                            rowIndex: j + compare1DescInfo.headerRow + 2,
+                            data: compare1DataRows[j],
+                            matchType: 'exact'
+                        });
+                    }
+                    // Then try TP2P match
+                    else if (isTP2PMatch(sourceDescription, compare1Description, 
+                             compare1DataRows[j], compare1DescInfo.creditColumn)) {
+                        foundInCompare1 = true;
+                        matchType1 = 'TP2P';
+                        matchingRows.file1.push({
+                            rowIndex: j + compare1DescInfo.headerRow + 2,
+                            data: compare1DataRows[j],
+                            matchType: 'TP2P'
+                        });
+                    }
                 }
             }
         }
@@ -90,31 +153,55 @@ function performComparison(source, compare1, compare2) {
         if (compare2DescInfo) {
             for (let k = 0; k < compare2DataRows.length; k++) {
                 const compare2Description = compare2DataRows[k][compare2DescInfo.columnIndex];
-                if (compare2Description && 
-                    sourceDescription.toString().toLowerCase().trim() === 
-                    compare2Description.toString().toLowerCase().trim()) {
-                    foundInCompare2 = true;
-                    matchingRows.file2.push({
-                        rowIndex: k + compare2DescInfo.headerRow + 2, // Actual Excel row number
-                        data: compare2DataRows[k]
-                    });
+                if (compare2Description) {
+                    // First try exact match
+                    if (sourceDescription.toString().toLowerCase().trim() === 
+                        compare2Description.toString().toLowerCase().trim()) {
+                        foundInCompare2 = true;
+                        matchType2 = 'exact';
+                        matchingRows.file2.push({
+                            rowIndex: k + compare2DescInfo.headerRow + 2,
+                            data: compare2DataRows[k],
+                            matchType: 'exact'
+                        });
+                    }
+                    // Then try TP2P match
+                    else if (isTP2PMatch(sourceDescription, compare2Description, 
+                             compare2DataRows[k], compare2DescInfo.creditColumn)) {
+                        foundInCompare2 = true;
+                        matchType2 = 'TP2P';
+                        matchingRows.file2.push({
+                            rowIndex: k + compare2DescInfo.headerRow + 2,
+                            data: compare2DataRows[k],
+                            matchType: 'TP2P'
+                        });
+                    }
                 }
             }
         }
         
         if (foundInCompare1 || foundInCompare2) {
             results.matches.push({
-                rowIndex: i + sourceDescInfo.headerRow + 2, // Actual Excel row number
+                rowIndex: i + sourceDescInfo.headerRow + 2,
                 data: sourceRow,
                 description: sourceDescription,
                 foundInFile1: foundInCompare1,
                 foundInFile2: foundInCompare2,
+                matchType1: matchType1,
+                matchType2: matchType2,
                 matchingRows: matchingRows
             });
             results.statistics.matchingRows++;
+            
+            // Count match types
+            if (matchType1 === 'TP2P' || matchType2 === 'TP2P') {
+                results.statistics.tp2pMatches++;
+            } else {
+                results.statistics.exactMatches++;
+            }
         } else {
             results.unique.push({
-                rowIndex: i + sourceDescInfo.headerRow + 2, // Actual Excel row number
+                rowIndex: i + sourceDescInfo.headerRow + 2,
                 data: sourceRow,
                 description: sourceDescription
             });
@@ -123,9 +210,7 @@ function performComparison(source, compare1, compare2) {
     }
 
     return results;
-}
-
-let sourceData = null;
+}let sourceData = null;
 let compareData1 = null;
 let compareData2 = null;
 let comparisonResults = null;
@@ -232,7 +317,7 @@ async function compareFiles() {
     }
 }
 
-// Removed duplicate and incomplete performComparison function
+/* Duplicate performComparison function removed to fix syntax error */
 
 function displayResults(results) {
     // Display statistics
@@ -247,11 +332,11 @@ function displayResults(results) {
         </div>
         <div class="stat-card ${descStatus.compare1 ? 'success' : 'error'}">
             <span class="stat-number">${descStatus.compare1 ? '✓' : '✗'}</span>
-            BDC EGP Desc Column
+            File 1 Desc Column
         </div>
         <div class="stat-card ${descStatus.compare2 ? 'success' : 'error'}">
             <span class="stat-number">${descStatus.compare2 ? '✓' : '✗'}</span>
-            BDC EGP - Euro based Desc Column
+            File 2 Desc Column
         </div>
     `;
     
@@ -262,7 +347,15 @@ function displayResults(results) {
         </div>
         <div class="stat-card">
             <span class="stat-number">${results.statistics.matchingRows}</span>
-            Matching Descriptions
+            Total Matches
+        </div>
+        <div class="stat-card tp2p-matches">
+            <span class="stat-number">${results.statistics.tp2pMatches || 0}</span>
+            TP2P Matches
+        </div>
+        <div class="stat-card exact-matches">
+            <span class="stat-number">${results.statistics.exactMatches || 0}</span>
+            Exact Matches
         </div>
         <div class="stat-card">
             <span class="stat-number">${results.statistics.uniqueRows}</span>
@@ -284,10 +377,10 @@ function displayResults(results) {
                     <tr>
                         <th>Row #</th>
                         <th>Description</th>
-                        <th>Full Row Data</th>
-                        <th>Found in BDC EGP</th>
-                        <th>Found in BDC EGP - Euro based</th>
-                        <th>Matching Details</th>
+                        <th>Match Type</th>
+                        <th>Found in File 1</th>
+                        <th>Found in File 2</th>
+                        <th>Match Details</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -296,19 +389,25 @@ function displayResults(results) {
         results.matches.slice(0, 100).forEach(match => {
             const matchDetails = [];
             if (match.foundInFile1) {
-                matchDetails.push(`BDC EGP: ${match.matchingRows.file1.length} matches`);
+                matchDetails.push(`File 1: ${match.matchingRows.file1.length} ${match.matchType1} matches`);
             }
             if (match.foundInFile2) {
-                matchDetails.push(`BDC EGP - Euro based: ${match.matchingRows.file2.length} matches`);
+                matchDetails.push(`File 2: ${match.matchingRows.file2.length} ${match.matchType2} matches`);
+            }
+            
+            // Determine overall match type
+            let overallMatchType = 'Exact';
+            if (match.matchType1 === 'TP2P' || match.matchType2 === 'TP2P') {
+                overallMatchType = 'TP2P';
             }
             
             tableHtml += `
                 <tr>
                     <td>${match.rowIndex}</td>
                     <td><strong>${match.description || 'N/A'}</strong></td>
-                    <td>${JSON.stringify(match.data).substring(0, 100)}...</td>
-                    <td class="${match.foundInFile1 ? 'success' : 'error'}">${match.foundInFile1 ? '✓' : '✗'}</td>
-                    <td class="${match.foundInFile2 ? 'success' : 'error'}">${match.foundInFile2 ? '✓' : '✗'}</td>
+                    <td class="${overallMatchType === 'TP2P' ? 'tp2p-match' : 'exact-match'}">${overallMatchType}</td>
+                    <td class="${match.foundInFile1 ? 'success' : 'error'}">${match.foundInFile1 ? '✓ ' + match.matchType1 : '✗'}</td>
+                    <td class="${match.foundInFile2 ? 'success' : 'error'}">${match.foundInFile2 ? '✓ ' + match.matchType2 : '✗'}</td>
                     <td>${matchDetails.join(', ')}</td>
                 </tr>
             `;
@@ -392,7 +491,7 @@ function exportResults(format) {
 }
 
 function generateCSV(results) {
-    let csv = 'Type,Row Number,Description,Full Row Data,Found in BDC EGP,Found in BDC EGP - Euro based,Match Details\n';
+    let csv = 'Type,Row Number,Description,Full Row Data,Found in File 1,Found in File 2,Match Details\n';
     
     results.matches.forEach(match => {
         const data = JSON.stringify(match.data).replace(/"/g, '""');
