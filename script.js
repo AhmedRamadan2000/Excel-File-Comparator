@@ -380,13 +380,12 @@ function displayResults(results) {
                         <th>Match Type</th>
                         <th>Found in File 1</th>
                         <th>Found in File 2</th>
-                        <th>Match Details</th>
                     </tr>
                 </thead>
                 <tbody>
         `;
         
-        results.matches.slice(0, 100).forEach(match => {
+        results.matches.forEach(match => {
             const matchDetails = [];
             if (match.foundInFile1) {
                 matchDetails.push(`File 1: ${match.matchingRows.file1.length} ${match.matchType1} matches`);
@@ -406,18 +405,15 @@ function displayResults(results) {
                     <td>${match.rowIndex}</td>
                     <td><strong>${match.description || 'N/A'}</strong></td>
                     <td class="${overallMatchType === 'TP2P' ? 'tp2p-match' : 'exact-match'}">${overallMatchType}</td>
-                    <td class="${match.foundInFile1 ? 'success' : 'error'}">${match.foundInFile1 ? '✓ ' + match.matchType1 : '✗'}</td>
-                    <td class="${match.foundInFile2 ? 'success' : 'error'}">${match.foundInFile2 ? '✓ ' + match.matchType2 : '✗'}</td>
-                    <td>${matchDetails.join(', ')}</td>
+                    <td class="${match.foundInFile1 ? 'success' : 'error'}">${match.foundInFile1 ? match.matchType1 === 'TP2P' ? 'credited to balance again' : 'exact' : '✗'}</td>
+                    <td class="${match.foundInFile2 ? 'success' : 'error'}">${match.foundInFile2 ? match.matchType2 === 'TP2P' ? 'credited to balance again' : 'exact' : '✗'}</td>
                 </tr>
             `;
         });
         
         tableHtml += '</tbody></table>';
         
-        if (results.matches.length > 100) {
-            tableHtml += `<p><em>Showing first 100 results. Total matches: ${results.matches.length}</em></p>`;
-        }
+
         
         matchingResults.innerHTML = tableHtml;
     } else {
@@ -439,7 +435,7 @@ function displayResults(results) {
                 <tbody>
         `;
         
-        results.unique.slice(0, 100).forEach(unique => {
+        results.unique.forEach(unique => {
             tableHtml += `
                 <tr>
                     <td>${unique.rowIndex}</td>
@@ -451,9 +447,7 @@ function displayResults(results) {
         
         tableHtml += '</tbody></table>';
         
-        if (results.unique.length > 100) {
-            tableHtml += `<p><em>Showing first 100 results. Total unique descriptions: ${results.unique.length}</em></p>`;
-        }
+
         
         uniqueResults.innerHTML = tableHtml;
     } else {
