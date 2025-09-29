@@ -62,8 +62,8 @@ function isTP2PMatch(sourceDesc, compareDesc, compareRow, creditColumnIndex) {
 function performComparison(source, compare1, compare2) {
     // Find description column info for each file
     const sourceDescInfo = findDescriptionColumn(source);
-    const compare1DescInfo = findDescriptionColumn(compare1);
-    const compare2DescInfo = findDescriptionColumn(compare2);
+    const compare1DescInfo = compare1 ? findDescriptionColumn(compare1) : null;
+    const compare2DescInfo = compare2 ? findDescriptionColumn(compare2) : null;
 
     const results = {
         statistics: {
@@ -78,6 +78,10 @@ function performComparison(source, compare1, compare2) {
                 source: sourceDescInfo !== null,
                 compare1: compare1DescInfo !== null,
                 compare2: compare2DescInfo !== null
+            },
+            filesCompared: {
+                wallet1: compare1 !== null,
+                wallet2: compare2 !== null
             }
         },
         matches: [],
@@ -86,13 +90,13 @@ function performComparison(source, compare1, compare2) {
 
     // If source doesn't have description column, return error
     if (!sourceDescInfo) {
-        throw new Error('Description column not found in source file. Please ensure your source file has a column named "Description" (case insensitive).');
+        throw new Error('Description column not found in Bank Sheet file. Please ensure your file has a column named "Description" (case insensitive).');
     }
 
     // Get data rows after the header row for each file
     const sourceDataRows = source.slice(sourceDescInfo.headerRow + 1);
-    const compare1DataRows = compare1DescInfo ? compare1.slice(compare1DescInfo.headerRow + 1) : [];
-    const compare2DataRows = compare2DescInfo ? compare2.slice(compare2DescInfo.headerRow + 1) : [];
+    const compare1DataRows = (compare1 && compare1DescInfo) ? compare1.slice(compare1DescInfo.headerRow + 1) : [];
+    const compare2DataRows = (compare2 && compare2DescInfo) ? compare2.slice(compare2DescInfo.headerRow + 1) : [];
 
     // Update row counts
     results.statistics.sourceRows = sourceDataRows.length;
@@ -118,8 +122,8 @@ function performComparison(source, compare1, compare2) {
             file2: []
         };
         
-        // Check if description exists in compare1
-        if (compare1DescInfo) {
+        // Check if description exists in compare1 (only if file was uploaded)
+        if (compare1 && compare1DescInfo) {
             for (let j = 0; j < compare1DataRows.length; j++) {
                 const compare1Description = compare1DataRows[j][compare1DescInfo.columnIndex];
                 if (compare1Description) {
@@ -149,8 +153,8 @@ function performComparison(source, compare1, compare2) {
             }
         }
         
-        // Check if description exists in compare2
-        if (compare2DescInfo) {
+        // Check if description exists in compare2 (only if file was uploaded)
+        if (compare2 && compare2DescInfo) {
             for (let k = 0; k < compare2DataRows.length; k++) {
                 const compare2Description = compare2DataRows[k][compare2DescInfo.columnIndex];
                 if (compare2Description) {
@@ -287,15 +291,33 @@ function readExcelFile(file) {
 
 function checkAllFilesLoaded() {
     const compareBtn = document.getElementById('compareBtn');
-    if (sourceData && compareData1 && compareData2) {
+    
+    // Enable button if we have source file and at least one comparison file
+    if (sourceData && (compareData1 || compareData2)) {
         compareBtn.disabled = false;
-        compareBtn.textContent = 'Start Comparison';
+        
+        // Update button text based on which files are loaded
+        if (compareData1 && compareData2) {
+            compareBtn.textContent = 'Compare with Both Wallets';
+        } else if (compareData1) {
+            compareBtn.textContent = 'Compare with Wallet 1';
+        } else if (compareData2) {
+            compareBtn.textContent = 'Compare with Wallet 2';
+        }
+    } else {
+        compareBtn.disabled = true;
+        compareBtn.textContent = 'Upload Bank Sheet + At Least 1 Wallet';
     }
 }
 
 async function compareFiles() {
-    if (!sourceData || !compareData1 || !compareData2) {
-        alert('Please upload all three files first.');
+    if (!sourceData) {
+        alert('Please upload the Bank Sheet file first.');
+        return;
+    }
+    
+    if (!compareData1 && !compareData2) {
+        alert('Please upload at least one Balad Wallet file for comparison.');
         return;
     }
 
@@ -317,7 +339,6 @@ async function compareFiles() {
     }
 }
 
-/* Duplicate performComparison function removed to fix syntax error */
 
 function displayResults(results) {
     // Display statistics
@@ -325,25 +346,37 @@ function displayResults(results) {
     
     // Check if description columns were found
     const descStatus = results.statistics.descriptionColumnFound;
-    const statusHtml = `
+    const filesCompared = results.statistics.filesCompared;
+    
+    let statusHtml = `
         <div class="stat-card ${descStatus.source ? 'success' : 'error'}">
             <span class="stat-number">${descStatus.source ? '✓' : '✗'}</span>
-            Source Desc Column
-        </div>
-        <div class="stat-card ${descStatus.compare1 ? 'success' : 'error'}">
-            <span class="stat-number">${descStatus.compare1 ? '✓' : '✗'}</span>
-            File 1 Desc Column
-        </div>
-        <div class="stat-card ${descStatus.compare2 ? 'success' : 'error'}">
-            <span class="stat-number">${descStatus.compare2 ? '✓' : '✗'}</span>
-            File 2 Desc Column
+            Bank Sheet Column
         </div>
     `;
+    
+    if (filesCompared.wallet1) {
+        statusHtml += `
+            <div class="stat-card ${descStatus.compare1 ? 'success' : 'error'}">
+                <span class="stat-number">${descStatus.compare1 ? '✓' : '✗'}</span>
+                Balad Wallet 1 Column
+            </div>
+        `;
+    }
+    
+    if (filesCompared.wallet2) {
+        statusHtml += `
+            <div class="stat-card ${descStatus.compare2 ? 'success' : 'error'}">
+                <span class="stat-number">${descStatus.compare2 ? '✓' : '✗'}</span>
+                Balad Wallet 2 Column
+            </div>
+        `;
+    }
     
     statsGrid.innerHTML = `
         <div class="stat-card">
             <span class="stat-number">${results.statistics.sourceRows}</span>
-            Source Rows
+            Bank Sheet Rows
         </div>
         <div class="stat-card">
             <span class="stat-number">${results.statistics.matchingRows}</span>
@@ -371,49 +404,81 @@ function displayResults(results) {
     // Display matching descriptions
     const matchingResults = document.getElementById('matchingResults');
     if (results.matches.length > 0) {
+        // Build table header dynamically based on which files are compared
+        let headerHtml = `
+            <tr>
+                <th>Row #</th>
+                <th>Description</th>
+                <th>Match Type</th>
+        `;
+        
+        if (filesCompared.wallet1) {
+            headerHtml += `<th>Found in Balad Wallet 1</th>`;
+        }
+        if (filesCompared.wallet2) {
+            headerHtml += `<th>Found in Balad Wallet 2</th>`;
+        }
+        
+        headerHtml += `</tr>`;
+        
         let tableHtml = `
             <table class="result-table">
                 <thead>
-                    <tr>
-                        <th>Row #</th>
-                        <th>Description</th>
-                        <th>Match Type</th>
-                        <th>Found in File 1</th>
-                        <th>Found in File 2</th>
-                    </tr>
+                    ${headerHtml}
                 </thead>
                 <tbody>
         `;
         
         results.matches.forEach(match => {
-            const matchDetails = [];
-            if (match.foundInFile1) {
-                matchDetails.push(`File 1: ${match.matchingRows.file1.length} ${match.matchType1} matches`);
-            }
-            if (match.foundInFile2) {
-                matchDetails.push(`File 2: ${match.matchingRows.file2.length} ${match.matchType2} matches`);
-            }
-            
             // Determine overall match type
             let overallMatchType = 'Exact';
             if (match.matchType1 === 'TP2P' || match.matchType2 === 'TP2P') {
                 overallMatchType = 'TP2P';
             }
             
-            tableHtml += `
+            let rowHtml = `
                 <tr>
                     <td>${match.rowIndex}</td>
                     <td><strong>${match.description || 'N/A'}</strong></td>
                     <td class="${overallMatchType === 'TP2P' ? 'tp2p-match' : 'exact-match'}">${overallMatchType}</td>
-                    <td class="${match.foundInFile1 ? 'success' : 'error'}">${match.foundInFile1 ? match.matchType1 === 'TP2P' ? 'credited to balance again' : 'exact' : '✗'}</td>
-                    <td class="${match.foundInFile2 ? 'success' : 'error'}">${match.foundInFile2 ? match.matchType2 === 'TP2P' ? 'credited to balance again' : 'exact' : '✗'}</td>
-                </tr>
             `;
+            
+            // Format status for Balad Wallet 1 (only if file was uploaded)
+            if (filesCompared.wallet1) {
+                let wallet1Status = '';
+                if (match.foundInFile1) {
+                    if (match.matchType1 === 'TP2P') {
+                        wallet1Status = '<span class="tp2p-status">Canceled and Credited to Balance</span>';
+                    } else {
+                        wallet1Status = '<span class="exact-status">✓ Exact</span>';
+                    }
+                } else {
+                    wallet1Status = '<span class="not-found-status">✗</span>';
+                }
+                rowHtml += `<td>${wallet1Status}</td>`;
+            }
+            
+            // Format status for Balad Wallet 2 (only if file was uploaded)
+            if (filesCompared.wallet2) {
+                let wallet2Status = '';
+                if (match.foundInFile2) {
+                    if (match.matchType2 === 'TP2P') {
+                        wallet2Status = '<span class="tp2p-status">Canceled and Credited to Balance</span>';
+                    } else {
+                        wallet2Status = '<span class="exact-status">✓ Exact</span>';
+                    }
+                } else {
+                    wallet2Status = '<span class="not-found-status">✗</span>';
+                }
+                rowHtml += `<td>${wallet2Status}</td>`;
+            }
+            
+            rowHtml += `</tr>`;
+            tableHtml += rowHtml;
         });
         
         tableHtml += '</tbody></table>';
-        
-
+        tableHtml += `<p><strong>Total matches: ${results.matches.length}</strong></p>`;
         
         matchingResults.innerHTML = tableHtml;
     } else {
@@ -446,12 +511,11 @@ function displayResults(results) {
         });
         
         tableHtml += '</tbody></table>';
-        
-
+        tableHtml += `<p><strong>Total unique descriptions: ${results.unique.length}</strong></p>`;
         
         uniqueResults.innerHTML = tableHtml;
     } else {
-        uniqueResults.innerHTML = '<p>No unique descriptions found. All source descriptions have matches in comparison files.</p>';
+        uniqueResults.innerHTML = '<p>No unique descriptions found. All bank descriptions have matches in Balad wallet files.</p>';
     }
 }
 
