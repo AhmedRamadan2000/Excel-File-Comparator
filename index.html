@@ -23,7 +23,7 @@
                 <h3>Balad Wallet 1</h3>
                 <p>Upload the first Balad wallet file (optional)</p>
                 <input type="file" id="compareFile1" class="file-input" accept=".xlsx,.xls,.csv">
-                <label for="compareFile1" class="file-label">Choose Balad Wallet Sheet</label>
+                <label for="compareFile1" class="file-label">Choose Balad Wallet 1</label>
                 <div class="file-name" id="compareFile1Name"></div>
             </div>
             
@@ -31,14 +31,14 @@
                 <h3>Balad Wallet 2</h3>
                 <p>Upload the second Balad wallet file (optional)</p>
                 <input type="file" id="compareFile2" class="file-input" accept=".xlsx,.xls,.csv">
-                <label for="compareFile2" class="file-label">Choose Balad Wallet Sheet</label>
+                <label for="compareFile2" class="file-label">Choose Balad Wallet 2</label>
                 <div class="file-name" id="compareFile2Name"></div>
             </div>
         </div>
         
         <div class="controls">
             <button class="compare-btn" onclick="compareFiles()" id="compareBtn" disabled>
-                Start Comparison
+                Upload Bank Sheet + At Least 1 Wallet
             </button>
         </div>
         
@@ -69,8 +69,8 @@
             </div>
             
             <div class="export-controls">
+                <button class="export-btn" onclick="exportResults('excel')">Export as Excel</button>
                 <button class="export-btn" onclick="exportResults('csv')">Export as CSV</button>
-                <button class="export-btn" onclick="exportResults('json')">Export as JSON</button>
             </div>
         </div>
     </div>
