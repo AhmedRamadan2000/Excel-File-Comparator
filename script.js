@@ -52,6 +52,118 @@ function isTP2PMatch(sourceDesc, compareDesc, compareRow, creditColumnIndex) {
     return compareDescMatch && isCreditEntry;
 }
 
+// ---------- SELL RATE helper ----------
+function isSellRateMatch(sourceDesc, sourceRow, sourceDescInfo, compareDesc, compareRow, compareDescInfo, compareData) {
+    if (!sourceDesc) return false;
+    
+    const sourceDescStr = sourceDesc.toString().toUpperCase().trim();
+    
+    // Check for different spellings of SELL RATE
+    const sellRatePatterns = [
+        /SELL RATE\s+([\d.]+)/,
+        /SALL RATE\s+([\d.]+)/, 
+        /SAEL RATE\s+([\d.]+)/,
+        /SEL RATE\s+([\d.]+)/,
+        /SAL RATE\s+([\d.]+)/
+    ];
+    
+    let rateMatch = null;
+    let sellRate = null;
+    
+    // Try each pattern until we find a match
+    for (const pattern of sellRatePatterns) {
+        rateMatch = sourceDescStr.match(pattern);
+        if (rateMatch) {
+            sellRate = parseFloat(rateMatch[1]);
+            break;
+        }
+    }
+    
+    if (!rateMatch) return false;
+    
+    // Get amount from source (Credit column)
+    let sourceAmount = 0;
+    if (sourceDescInfo.creditColumn >= 0 && sourceRow[sourceDescInfo.creditColumn]) {
+        sourceAmount = parseFloat(sourceRow[sourceDescInfo.creditColumn].toString().replace(/,/g, ''));
+    }
+    
+    // Try to find date in source row (look in first few columns)
+    let sourceDate = null;
+    for (let i = 0; i < Math.min(3, sourceRow.length); i++) {
+        const cell = sourceRow[i];
+        if (cell && typeof cell === 'string' && cell.match(/\d{1,2}-\d{1,2}-\d{4}/)) {
+            sourceDate = new Date(cell);
+            if (!isNaN(sourceDate.getTime())) break;
+        }
+    }
+    
+    // Check if compare description indicates a transfer with rate
+    if (!compareDesc || !compareDesc.toString().toUpperCase().includes('TRANSFER')) return false;
+    
+    const compareDescStr = compareDesc.toString().toUpperCase();
+    
+    // Look for rate in compare row (FxRate column or in description)
+    let compareRate = null;
+    let compareAmount = 0;
+    let compareDate = null;
+    
+    // Try to find FxRate column in compare sheet
+    let fxRateColumn = -1;
+    if (compareDescInfo && compareRow && compareData) {
+        // Look for FxRate column in header row
+        const headerRow = compareData[compareDescInfo.headerRow] || [];
+        for (let i = 0; i < headerRow.length; i++) {
+            if (headerRow[i] && headerRow[i].toString().toLowerCase().includes('fxrate')) {
+                fxRateColumn = i;
+                break;
+            }
+        }
+        
+        // Get amount from compare (Credit column)
+        if (compareDescInfo.creditColumn >= 0 && compareRow[compareDescInfo.creditColumn]) {
+            compareAmount = parseFloat(compareRow[compareDescInfo.creditColumn].toString().replace(/,/g, ''));
+        }
+        
+        // Try to find date in compare row
+        for (let i = 0; i < Math.min(3, compareRow.length); i++) {
+            const cell = compareRow[i];
+            if (cell && typeof cell === 'string' && cell.match(/\d{1,2}-\d{1,2}-\d{4}/)) {
+                compareDate = new Date(cell);
+                if (!isNaN(compareDate.getTime())) break;
+            }
+        }
+        
+        // Get rate from FxRate column if available
+        if (fxRateColumn >= 0 && compareRow[fxRateColumn]) {
+            compareRate = parseFloat(compareRow[fxRateColumn].toString().replace(/,/g, ''));
+        }
+    }
+    
+    // If no FxRate column found, try to extract rate from description
+    if (!compareRate) {
+        const rateMatchCompare = compareDescStr.match(/RATE\s+([\d.]+)/);
+        if (rateMatchCompare) {
+            compareRate = parseFloat(rateMatchCompare[1]);
+        }
+    }
+    
+    // Check if amounts are approximately equal (allowing for small differences)
+    const amountMatch = !isNaN(sourceAmount) && !isNaN(compareAmount) && 
+                       Math.abs(sourceAmount - compareAmount) < 0.01;
+    
+    // Check if rates match
+    const rateMatchFound = !isNaN(sellRate) && !isNaN(compareRate) && 
+                          Math.abs(sellRate - compareRate) < 0.001;
+    
+    // Check if dates match (if both are available)
+    const dateMatch = !sourceDate || !compareDate || 
+                     (sourceDate.getDate() === compareDate.getDate() &&
+                      sourceDate.getMonth() === compareDate.getMonth() &&
+                      sourceDate.getFullYear() === compareDate.getFullYear());
+    
+    return amountMatch && rateMatchFound && dateMatch;
+}
+
 // ---------- Main comparison ----------
 function performComparison(source, compare1, compare2) {
     const sourceDescInfo = findDescriptionColumn(source);
@@ -67,6 +179,7 @@ function performComparison(source, compare1, compare2) {
             uniqueRows: 0,
             tp2pMatches: 0,
             exactMatches: 0,
+            sellRateMatches: 0,
             descriptionColumnFound: {
                 source: !!sourceDescInfo,
                 compare1: !!compare1DescInfo,
@@ -114,11 +227,15 @@ function performComparison(source, compare1, compare2) {
                 const desc = row[compare1DescInfo.columnIndex];
                 if (!desc) continue;
                 const amounts = getDebitCredit(row, compare1DescInfo);
+                
                 if (sourceDescription.toString().toLowerCase().trim() === desc.toString().toLowerCase().trim()) {
                     foundInCompare1 = true; matchType1='exact';
                     matchingRows.file1.push({...row, debit: amounts.debit, credit: amounts.credit, rowIndex: j + compare1DescInfo.headerRow + 2});
                 } else if (isTP2PMatch(sourceDescription, desc, row, compare1DescInfo.creditColumn)) {
                     foundInCompare1 = true; matchType1='TP2P';
+                    matchingRows.file1.push({...row, debit: amounts.debit, credit: amounts.credit, rowIndex: j + compare1DescInfo.headerRow + 2});
+                } else if (isSellRateMatch(sourceDescription, sourceRow, sourceDescInfo, desc, row, compare1DescInfo, compare1)) {
+                    foundInCompare1 = true; matchType1='SELL_RATE';
                     matchingRows.file1.push({...row, debit: amounts.debit, credit: amounts.credit, rowIndex: j + compare1DescInfo.headerRow + 2});
                 }
             }
@@ -130,11 +247,15 @@ function performComparison(source, compare1, compare2) {
                 const desc = row[compare2DescInfo.columnIndex];
                 if (!desc) continue;
                 const amounts = getDebitCredit(row, compare2DescInfo);
+                
                 if (sourceDescription.toString().toLowerCase().trim() === desc.toString().toLowerCase().trim()) {
                     foundInCompare2 = true; matchType2='exact';
                     matchingRows.file2.push({...row, debit: amounts.debit, credit: amounts.credit, rowIndex: j + compare2DescInfo.headerRow + 2});
                 } else if (isTP2PMatch(sourceDescription, desc, row, compare2DescInfo.creditColumn)) {
                     foundInCompare2 = true; matchType2='TP2P';
+                    matchingRows.file2.push({...row, debit: amounts.debit, credit: amounts.credit, rowIndex: j + compare2DescInfo.headerRow + 2});
+                } else if (isSellRateMatch(sourceDescription, sourceRow, sourceDescInfo, desc, row, compare2DescInfo, compare2)) {
+                    foundInCompare2 = true; matchType2='SELL_RATE';
                     matchingRows.file2.push({...row, debit: amounts.debit, credit: amounts.credit, rowIndex: j + compare2DescInfo.headerRow + 2});
                 }
             }
@@ -155,8 +276,14 @@ function performComparison(source, compare1, compare2) {
                 matchingRows
             });
             results.statistics.matchingRows++;
-            if (matchType1==='TP2P' || matchType2==='TP2P') results.statistics.tp2pMatches++;
-            else results.statistics.exactMatches++;
+            
+            if (matchType1==='SELL_RATE' || matchType2==='SELL_RATE') {
+                results.statistics.sellRateMatches++;
+            } else if (matchType1==='TP2P' || matchType2==='TP2P') {
+                results.statistics.tp2pMatches++;
+            } else {
+                results.statistics.exactMatches++;
+            }
         } else {
             results.unique.push({
                 rowIndex: i + sourceDescInfo.headerRow + 2,
