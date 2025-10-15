@@ -58,7 +58,6 @@ function isSellRateMatch(sourceDesc, sourceRow, sourceDescInfo, compareDesc, com
     
     const sourceDescStr = sourceDesc.toString().toUpperCase().trim();
     
-    // Check for different spellings of SELL RATE
     const sellRatePatterns = [
         /SELL RATE\s+([\d.]+)/,
         /SALL RATE\s+([\d.]+)/, 
@@ -70,7 +69,6 @@ function isSellRateMatch(sourceDesc, sourceRow, sourceDescInfo, compareDesc, com
     let rateMatch = null;
     let sellRate = null;
     
-    // Try each pattern until we find a match
     for (const pattern of sellRatePatterns) {
         rateMatch = sourceDescStr.match(pattern);
         if (rateMatch) {
@@ -81,13 +79,11 @@ function isSellRateMatch(sourceDesc, sourceRow, sourceDescInfo, compareDesc, com
     
     if (!rateMatch) return false;
     
-    // Get amount from source (Credit column)
     let sourceAmount = 0;
     if (sourceDescInfo.creditColumn >= 0 && sourceRow[sourceDescInfo.creditColumn]) {
         sourceAmount = parseFloat(sourceRow[sourceDescInfo.creditColumn].toString().replace(/,/g, ''));
     }
     
-    // Try to find date in source row (look in first few columns)
     let sourceDate = null;
     for (let i = 0; i < Math.min(3, sourceRow.length); i++) {
         const cell = sourceRow[i];
@@ -97,20 +93,16 @@ function isSellRateMatch(sourceDesc, sourceRow, sourceDescInfo, compareDesc, com
         }
     }
     
-    // Check if compare description indicates a transfer with rate
     if (!compareDesc || !compareDesc.toString().toUpperCase().includes('TRANSFER')) return false;
     
     const compareDescStr = compareDesc.toString().toUpperCase();
     
-    // Look for rate in compare row (FxRate column or in description)
     let compareRate = null;
     let compareAmount = 0;
     let compareDate = null;
     
-    // Try to find FxRate column in compare sheet
     let fxRateColumn = -1;
     if (compareDescInfo && compareRow && compareData) {
-        // Look for FxRate column in header row
         const headerRow = compareData[compareDescInfo.headerRow] || [];
         for (let i = 0; i < headerRow.length; i++) {
             if (headerRow[i] && headerRow[i].toString().toLowerCase().includes('fxrate')) {
@@ -119,12 +111,10 @@ function isSellRateMatch(sourceDesc, sourceRow, sourceDescInfo, compareDesc, com
             }
         }
         
-        // Get amount from compare (Credit column)
         if (compareDescInfo.creditColumn >= 0 && compareRow[compareDescInfo.creditColumn]) {
             compareAmount = parseFloat(compareRow[compareDescInfo.creditColumn].toString().replace(/,/g, ''));
         }
         
-        // Try to find date in compare row
         for (let i = 0; i < Math.min(3, compareRow.length); i++) {
             const cell = compareRow[i];
             if (cell && typeof cell === 'string' && cell.match(/\d{1,2}-\d{1,2}-\d{4}/)) {
@@ -133,13 +123,11 @@ function isSellRateMatch(sourceDesc, sourceRow, sourceDescInfo, compareDesc, com
             }
         }
         
-        // Get rate from FxRate column if available
         if (fxRateColumn >= 0 && compareRow[fxRateColumn]) {
             compareRate = parseFloat(compareRow[fxRateColumn].toString().replace(/,/g, ''));
         }
     }
     
-    // If no FxRate column found, try to extract rate from description
     if (!compareRate) {
         const rateMatchCompare = compareDescStr.match(/RATE\s+([\d.]+)/);
         if (rateMatchCompare) {
@@ -147,15 +135,12 @@ function isSellRateMatch(sourceDesc, sourceRow, sourceDescInfo, compareDesc, com
         }
     }
     
-    // Check if amounts are approximately equal (allowing for small differences)
     const amountMatch = !isNaN(sourceAmount) && !isNaN(compareAmount) && 
                        Math.abs(sourceAmount - compareAmount) < 0.01;
     
-    // Check if rates match
     const rateMatchFound = !isNaN(sellRate) && !isNaN(compareRate) && 
                           Math.abs(sellRate - compareRate) < 0.001;
     
-    // Check if dates match (if both are available)
     const dateMatch = !sourceDate || !compareDate || 
                      (sourceDate.getDate() === compareDate.getDate() &&
                       sourceDate.getMonth() === compareDate.getMonth() &&
@@ -177,6 +162,8 @@ function performComparison(source, compare1, compare2) {
             compare2Rows: 0,
             matchingRows: 0,
             uniqueRows: 0,
+            uniqueInWallet1: 0,
+            uniqueInWallet2: 0,
             tp2pMatches: 0,
             exactMatches: 0,
             sellRateMatches: 0,
@@ -191,7 +178,8 @@ function performComparison(source, compare1, compare2) {
             }
         },
         matches: [],
-        unique: []
+        unique: [],
+        uniqueInWallets: []
     };
 
     if (!sourceDescInfo) throw new Error('Description column not found in Bank Sheet file.');
@@ -296,6 +284,117 @@ function performComparison(source, compare1, compare2) {
         }
     }
 
+    // Now check for transactions in wallet files that don't exist in bank sheet
+    // Check Wallet 1
+    if (compare1 && compare1DescInfo) {
+        for (let j = 0; j < compare1DataRows.length; j++) {
+            const compareRow = compare1DataRows[j] || [];
+            const compareDescription = compareRow[compare1DescInfo.columnIndex];
+            
+            if (!compareDescription || compareDescription.toString().trim() === '') continue;
+            
+            let foundInSource = false;
+            
+            // Check if this wallet description exists in bank sheet
+            for (let i = 0; i < sourceDataRows.length; i++) {
+                const sourceRow = sourceDataRows[i] || [];
+                const sourceDescription = sourceRow[sourceDescInfo.columnIndex];
+                
+                if (!sourceDescription) continue;
+                
+                // Check exact match
+                if (compareDescription.toString().toLowerCase().trim() === sourceDescription.toString().toLowerCase().trim()) {
+                    foundInSource = true;
+                    break;
+                }
+                
+                // Check if bank has TP2P version of this description
+                if (sourceDescription.toString().toUpperCase().trim().endsWith('TP2P')) {
+                    const baseCode = sourceDescription.toString().trim().slice(0, -4).trim();
+                    if (compareDescription.toString().trim() === baseCode) {
+                        foundInSource = true;
+                        break;
+                    }
+                }
+                
+                // Check SELL RATE match
+                if (isSellRateMatch(sourceDescription, sourceRow, sourceDescInfo, compareDescription, compareRow, compare1DescInfo, compare1)) {
+                    foundInSource = true;
+                    break;
+                }
+            }
+            
+            if (!foundInSource) {
+                const amounts = getDebitCredit(compareRow, compare1DescInfo);
+                results.uniqueInWallets.push({
+                    rowIndex: j + compare1DescInfo.headerRow + 2,
+                    description: compareDescription,
+                    data: compareRow,
+                    debit: amounts.debit,
+                    credit: amounts.credit,
+                    source: 'Balad Wallet 1',
+                    fileName: document.getElementById('compareFile1Name').textContent || 'Wallet 1'
+                });
+                results.statistics.uniqueInWallet1++;
+            }
+        }
+    }
+    
+    // Check Wallet 2
+    if (compare2 && compare2DescInfo) {
+        for (let k = 0; k < compare2DataRows.length; k++) {
+            const compareRow = compare2DataRows[k] || [];
+            const compareDescription = compareRow[compare2DescInfo.columnIndex];
+            
+            if (!compareDescription || compareDescription.toString().trim() === '') continue;
+            
+            let foundInSource = false;
+            
+            // Check if this wallet description exists in bank sheet
+            for (let i = 0; i < sourceDataRows.length; i++) {
+                const sourceRow = sourceDataRows[i] || [];
+                const sourceDescription = sourceRow[sourceDescInfo.columnIndex];
+                
+                if (!sourceDescription) continue;
+                
+                // Check exact match
+                if (compareDescription.toString().toLowerCase().trim() === sourceDescription.toString().toLowerCase().trim()) {
+                    foundInSource = true;
+                    break;
+                }
+                
+                // Check if bank has TP2P version of this description
+                if (sourceDescription.toString().toUpperCase().trim().endsWith('TP2P')) {
+                    const baseCode = sourceDescription.toString().trim().slice(0, -4).trim();
+                    if (compareDescription.toString().trim() === baseCode) {
+                        foundInSource = true;
+                        break;
+                    }
+                }
+                
+                // Check SELL RATE match
+                if (isSellRateMatch(sourceDescription, sourceRow, sourceDescInfo, compareDescription, compareRow, compare2DescInfo, compare2)) {
+                    foundInSource = true;
+                    break;
+                }
+            }
+            
+            if (!foundInSource) {
+                const amounts = getDebitCredit(compareRow, compare2DescInfo);
+                results.uniqueInWallets.push({
+                    rowIndex: k + compare2DescInfo.headerRow + 2,
+                    description: compareDescription,
+                    data: compareRow,
+                    debit: amounts.debit,
+                    credit: amounts.credit,
+                    source: 'Balad Wallet 2',
+                    fileName: document.getElementById('compareFile2Name').textContent || 'Wallet 2'
+                });
+                results.statistics.uniqueInWallet2++;
+            }
+        }
+    }
+
     return results;
 }
 
@@ -304,7 +403,6 @@ let compareData1 = null;
 let compareData2 = null;
 let comparisonResults = null;
 
-// File upload handlers
 document.getElementById('sourceFile').addEventListener('change', function(e) {
     handleFileUpload(e, 'sourceFileName', 'source');
 });
@@ -352,14 +450,9 @@ function readExcelFile(file) {
             try {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
-                
-                // Get the first sheet
                 const firstSheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[firstSheetName];
-                
-                // Convert to JSON
                 const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1});
-                
                 resolve(jsonData);
             } catch (error) {
                 reject(error);
@@ -377,11 +470,9 @@ function readExcelFile(file) {
 function checkAllFilesLoaded() {
     const compareBtn = document.getElementById('compareBtn');
     
-    // Enable button if we have source file and at least one comparison file
     if (sourceData && (compareData1 || compareData2)) {
         compareBtn.disabled = false;
         
-        // Update button text based on which files are loaded
         if (compareData1 && compareData2) {
             compareBtn.textContent = 'Compare with Both Wallets';
         } else if (compareData1) {
@@ -409,7 +500,6 @@ async function compareFiles() {
     document.getElementById('loading').style.display = 'block';
     document.getElementById('results').style.display = 'none';
 
-    // Simulate processing time for better UX
     await new Promise(resolve => setTimeout(resolve, 500));
 
     try {
@@ -424,13 +514,8 @@ async function compareFiles() {
     }
 }
 
-// REMOVE this duplicate and incomplete performComparison function
-
 function displayResults(results) {
-    // Display statistics
     const statsGrid = document.getElementById('statsGrid');
-    
-    // Check if description columns were found
     const descStatus = results.statistics.descriptionColumnFound;
     const filesCompared = results.statistics.filesCompared;
     
@@ -468,6 +553,10 @@ function displayResults(results) {
             <span class="stat-number">${results.statistics.matchingRows}</span>
             Total Matches
         </div>
+        <div class="stat-card sell-rate-matches">
+            <span class="stat-number">${results.statistics.sellRateMatches || 0}</span>
+            SELL RATE Matches
+        </div>
         <div class="stat-card tp2p-matches">
             <span class="stat-number">${results.statistics.tp2pMatches || 0}</span>
             TP2P Matches
@@ -478,7 +567,11 @@ function displayResults(results) {
         </div>
         <div class="stat-card">
             <span class="stat-number">${results.statistics.uniqueRows}</span>
-            Unique Descriptions
+            Unique in Bank Sheet
+        </div>
+        <div class="stat-card wallet-unique">
+            <span class="stat-number">${(results.statistics.uniqueInWallet1 || 0) + (results.statistics.uniqueInWallet2 || 0)}</span>
+            Unique in Wallets
         </div>
         <div class="stat-card">
             <span class="stat-number">${results.statistics.sourceRows > 0 ? Math.round((results.statistics.matchingRows / results.statistics.sourceRows) * 100) : 0}%</span>
@@ -487,10 +580,8 @@ function displayResults(results) {
         ${statusHtml}
     `;
 
-    // Display matching descriptions
     const matchingResults = document.getElementById('matchingResults');
     if (results.matches.length > 0) {
-        // Build table header dynamically based on which files are compared
         let headerHtml = `
             <tr>
                 <th>Row #</th>
@@ -518,13 +609,17 @@ function displayResults(results) {
         `;
         
         results.matches.forEach(match => {
-            // Determine overall match type
             let overallMatchType = 'Exact';
-            if (match.matchType1 === 'TP2P' || match.matchType2 === 'TP2P') {
+            let badgeClass = 'exact-match';
+            
+            if (match.matchType1 === 'SELL_RATE' || match.matchType2 === 'SELL_RATE') {
+                overallMatchType = 'SELL RATE';
+                badgeClass = 'sell-rate-match';
+            } else if (match.matchType1 === 'TP2P' || match.matchType2 === 'TP2P') {
                 overallMatchType = 'TP2P';
+                badgeClass = 'tp2p-match';
             }
             
-            // Extract debit and credit from the row data
             const debit = match.debit || '';
             const credit = match.credit || '';
             
@@ -534,15 +629,16 @@ function displayResults(results) {
                     <td><strong>${match.description || 'N/A'}</strong></td>
                     <td>${debit}</td>
                     <td>${credit}</td>
-                    <td class="${overallMatchType === 'TP2P' ? 'tp2p-match' : 'exact-match'}">${overallMatchType}</td>
+                    <td class="${badgeClass}">${overallMatchType}</td>
             `;
             
-            // Format status for Balad Wallet 1 (only if file was uploaded)
             if (filesCompared.wallet1) {
                 let wallet1Status = '';
                 if (match.foundInFile1) {
                     if (match.matchType1 === 'TP2P') {
                         wallet1Status = '<span class="tp2p-status">Canceled and Credited to Balance</span>';
+                    } else if (match.matchType1 === 'SELL_RATE') {
+                        wallet1Status = '<span class="sell-rate-status">Currency Exchange Matched</span>';
                     } else {
                         wallet1Status = '<span class="exact-status">✓ Exact</span>';
                     }
@@ -552,12 +648,13 @@ function displayResults(results) {
                 rowHtml += `<td>${wallet1Status}</td>`;
             }
             
-            // Format status for Balad Wallet 2 (only if file was uploaded)
             if (filesCompared.wallet2) {
                 let wallet2Status = '';
                 if (match.foundInFile2) {
                     if (match.matchType2 === 'TP2P') {
                         wallet2Status = '<span class="tp2p-status">Canceled and Credited to Balance</span>';
+                    } else if (match.matchType2 === 'SELL_RATE') {
+                        wallet2Status = '<span class="sell-rate-status">Currency Exchange Matched</span>';
                     } else {
                         wallet2Status = '<span class="exact-status">✓ Exact</span>';
                     }
@@ -579,72 +676,174 @@ function displayResults(results) {
         matchingResults.innerHTML = '<p>No matching descriptions found between the files.</p>';
     }
 
-    // Display unique descriptions
     const uniqueResults = document.getElementById('uniqueResults');
-    if (results.unique.length > 0) {
-        let tableHtml = `
-            <table class="result-table">
-                <thead>
-                    <tr>
-                        <th>Row #</th>
-                        <th>Description</th>
-                        <th>Debit</th>
-                        <th>Credit</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
+    if (results.unique.length > 0 || results.uniqueInWallets.length > 0) {
+        let tableHtml = '';
         
-        results.unique.forEach(unique => {
-            const debit = unique.debit || '';
-            const credit = unique.credit || '';
+        // Bank Sheet Unique Records
+        if (results.unique.length > 0) {
+            tableHtml += `
+                <h3 style="color: #e74c3c; margin-top: 20px;">Unique in Bank Sheet (Not in Wallets)</h3>
+                <table class="result-table">
+                    <thead>
+                        <tr>
+                            <th>Row #</th>
+                            <th>Description</th>
+                            <th>Debit</th>
+                            <th>Credit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            results.unique.forEach(unique => {
+                const debit = unique.debit || '';
+                const credit = unique.credit || '';
+                
+                tableHtml += `
+                    <tr>
+                        <td>${unique.rowIndex}</td>
+                        <td><strong>${unique.description || 'N/A'}</strong></td>
+                        <td>${debit}</td>
+                        <td>${credit}</td>
+                    </tr>
+                `;
+            });
             
             tableHtml += `
-                <tr>
-                    <td>${unique.rowIndex}</td>
-                    <td><strong>${unique.description || 'N/A'}</strong></td>
-                    <td>${debit}</td>
-                    <td>${credit}</td>
-                </tr>
+                    </tbody>
+                </table>
+                <p><strong>Total unique in Bank Sheet: ${results.unique.length}</strong></p>
             `;
-        });
+        }
         
-        tableHtml += '</tbody></table>';
-        tableHtml += `<p><strong>Total unique descriptions: ${results.unique.length}</strong></p>`;
+        // Wallet Unique Records
+        if (results.uniqueInWallets.length > 0) {
+            tableHtml += `
+                <h3 style="color: #9b59b6; margin-top: 30px;">Unique in Wallets (Not in Bank Sheet)</h3>
+                <table class="result-table">
+                    <thead>
+                        <tr>
+                            <th>Source File</th>
+                            <th>Row #</th>
+                            <th>Description</th>
+                            <th>Debit</th>
+                            <th>Credit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            results.uniqueInWallets.forEach(unique => {
+                const debit = unique.debit || '';
+                const credit = unique.credit || '';
+                
+                tableHtml += `
+                    <tr>
+                        <td><span class="wallet-badge">${unique.source}</span></td>
+                        <td>${unique.rowIndex}</td>
+                        <td><strong>${unique.description || 'N/A'}</strong></td>
+                        <td>${debit}</td>
+                        <td>${credit}</td>
+                    </tr>
+                `;
+            });
+            
+            tableHtml += `
+                    </tbody>
+                </table>
+                <p><strong>Total unique in Wallets: ${results.uniqueInWallets.length}</strong></p>
+            `;
+        }
         
         uniqueResults.innerHTML = tableHtml;
     } else {
-        uniqueResults.innerHTML = '<p>No unique descriptions found. All bank descriptions have matches in Balad wallet files.</p>';
+        uniqueResults.innerHTML = '<p>No unique descriptions found. All transactions are matched!</p>';
     }
 }
-/* The following duplicate and invalid code block is removed to fix syntax errors. */
 
-function exportResults() {
+function exportResults(format) {
     if (!comparisonResults) {
         alert('No results to export. Please run a comparison first.');
         return;
     }
 
-    const file1Name = document.getElementById('compareFile1Name').textContent || 'File 1';
-    const file2Name = document.getElementById('compareFile2Name').textContent || 'File 2';
+    const file1Name = document.getElementById('compareFile1Name').textContent || 'Wallet1';
+    const file2Name = document.getElementById('compareFile2Name').textContent || 'Wallet2';
 
-    // Generate CSV content
-    const csvContent = generateCSV(comparisonResults, file1Name, file2Name);
-
-    // Create a blob and download as .csv (Excel compatible)
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'BankComparisonResults.csv'; // File name
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    if (format === 'excel') {
+        exportToExcel(comparisonResults, file1Name, file2Name);
+    } else if (format === 'csv') {
+        const csvContent = generateCSV(comparisonResults, file1Name, file2Name);
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'BankComparisonResults.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
 }
 
+function exportToExcel(results, file1Name, file2Name) {
+    const wb = XLSX.utils.book_new();
+    
+    const matchingData = [];
+    matchingData.push(['Row #', 'Description', 'Debit', 'Credit', 'Balance', 'Match Type', `Found in ${file1Name}`, `Found in ${file2Name}`]);
+    
+    results.matches.forEach(match => {
+        const balance = match.data[match.data.length - 1] || '';
+        matchingData.push([
+            match.rowIndex,
+            match.description || '',
+            match.debit || '',
+            match.credit || '',
+            balance,
+            (match.matchType1 === 'SELL_RATE' || match.matchType2 === 'SELL_RATE') ? 'SELL RATE' :
+            (match.matchType1 === 'TP2P' || match.matchType2 === 'TP2P') ? 'TP2P' : 'Exact',
+            match.foundInFile1 ? (match.matchType1 === 'TP2P' ? 'Canceled and Credited' : match.matchType1 === 'SELL_RATE' ? 'Currency Exchange' : 'Yes') : 'No',
+            match.foundInFile2 ? (match.matchType2 === 'TP2P' ? 'Canceled and Credited' : match.matchType2 === 'SELL_RATE' ? 'Currency Exchange' : 'Yes') : 'No'
+        ]);
+    });
+    
+    const ws1 = XLSX.utils.aoa_to_sheet(matchingData);
+    XLSX.utils.book_append_sheet(wb, ws1, 'Matching Records');
+    
+    const uniqueData = [];
+    uniqueData.push(['Row #', 'Description', 'Debit', 'Credit', 'Balance']);
+    
+    results.unique.forEach(unique => {
+        const balance = unique.data[unique.data.length - 1] || '';
+        uniqueData.push([
+            unique.rowIndex,
+            unique.description || '',
+            unique.debit || '',
+            unique.credit || '',
+            balance
+        ]);
+    });
+    
+    // Add wallet unique records to the same sheet
+    results.uniqueInWallets.forEach(unique => {
+        const balance = unique.data[unique.data.length - 1] || '';
+        uniqueData.push([
+            `${unique.source} - Row ${unique.rowIndex}`,
+            unique.description || '',
+            unique.debit || '',
+            unique.credit || '',
+            balance
+        ]);
+    });
+    
+    const ws2 = XLSX.utils.aoa_to_sheet(uniqueData);
+    XLSX.utils.book_append_sheet(wb, ws2, 'Not Matching Records');
+    
+    XLSX.writeFile(wb, 'Bank_Comparison_Results.xlsx');
+}
 
-function generateCSV(results, file1Name = 'File 1', file2Name = 'File 2') {
+function generateCSV(results, file1Name, file2Name) {
     let csv = [
         'Type',
         'Row Number',
@@ -657,7 +856,6 @@ function generateCSV(results, file1Name = 'File 1', file2Name = 'File 2') {
         'Match Details'
     ].join(',') + '\n';
 
-    // Matches
     results.matches.forEach(match => {
         const description = match.description || 'N/A';
         const debit = match.debit || '';
@@ -673,27 +871,24 @@ function generateCSV(results, file1Name = 'File 1', file2Name = 'File 2') {
             `"${balance}"`,
             match.foundInFile1,
             match.foundInFile2,
-            '' // Empty for matches
+            ''
         ].join(',') + '\n';
     });
 
-    // Unique
     results.unique.forEach(unique => {
         const description = unique.description || 'N/A';
         const debit = unique.debit || '';
         const credit = unique.credit || '';
         const balance = unique.data[unique.data.length - 1] || '';
-
         csv += [
-            'Unique',
+            'Unique in Bank Sheet',
             unique.rowIndex,
             `"${description}"`,
             `"${debit}"`,
             `"${credit}"`,
             `"${balance}"`,
-            '', '', '"No matches found"'
+            '',
+            '',
+            ''
         ].join(',') + '\n';
-    });
-
-    return csv;
-}
+    });}
